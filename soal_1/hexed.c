@@ -21,7 +21,6 @@ static char *hexStr = NULL;
 static char outputFileName[256];
 static FILE *logFile = NULL;
 
-// Function to download file from Google Drive
 void downloadFileFromDrive(const char *fileId, const char *outputFile) {
     char command[512];
     snprintf(command, sizeof(command),
