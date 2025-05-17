@@ -10,6 +10,7 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <openssl/evp.h>
 #include <openssl/aes.h>
 #include <openssl/rand.h>
 #include <zlib.h>
@@ -30,12 +31,11 @@
 #define YOUTH_EXT   ".gz"
 #define PATH_MAX    4096
 
-// Helper function to get real path for starter area
+
 static void get_starter(const char *fuse_path, char *real_path) {
     snprintf(real_path, PATH_MAX, "%s/%s%s", STARTER_DIR, fuse_path, STARTER_EXT);
 }
 
-// Helper function for metro area shift encryption
 static void metro_encrypt(const char *input, char *output, size_t len) {
     for (size_t i = 0; i < len; i++) {
         output[i] = (input[i] + (i % 256)) % 256;
@@ -48,12 +48,10 @@ static void metro_decrypt(const char *input, char *output, size_t len) {
     }
 }
 
-// Helper function to get real path for metro area
 static void get_metro(const char *fuse_path, char *real_path) {
     snprintf(real_path, PATH_MAX, "%s/%s%s", METRO_DIR, fuse_path, METRO_EXT);
 }
 
-// ROT13 implementation for dragon area
 static void rot13(char *str, size_t len) {
     for (size_t i = 0; i < len; i++) {
         if (str[i] >= 'a' && str[i] <= 'z') {
@@ -64,35 +62,59 @@ static void rot13(char *str, size_t len) {
     }
 }
 
-// Helper function to get real path for dragon area
 static void get_dragon(const char *fuse_path, char *real_path) {
     snprintf(real_path, PATH_MAX, "%s/%s%s", DRAGON_DIR, fuse_path, DRAGON_EXT);
 }
 
-// Helper function to get real path for blackrose area
+
 static void get_blackrose(const char *fuse_path, char *real_path) {
     snprintf(real_path, PATH_MAX, "%s/%s%s", BLACKROSE_DIR, fuse_path, BLACKROSE_EXT);
 }
 
 // AES encryption for heaven area
 static void aes_encrypt(const char *input, size_t len, char *output, unsigned char *iv) {
-    AES_KEY aes_key;
-    AES_set_encrypt_key((const unsigned char *)HEAVEN_KEY, 256, &aes_key);
-    AES_cbc_encrypt((const unsigned char *)input, (unsigned char *)output, len, &aes_key, iv, AES_ENCRYPT);
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    int outlen;
+    
+    EVP_EncryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, 
+                      (const unsigned char *)HEAVEN_KEY, iv);
+    EVP_EncryptUpdate(ctx, (unsigned char *)output, &outlen, 
+                     (const unsigned char *)input, len);
+    EVP_EncryptFinal_ex(ctx, (unsigned char *)output + outlen, &outlen);
+    EVP_CIPHER_CTX_free(ctx);
 }
 
 static void aes_decrypt(const char *input, size_t len, char *output, unsigned char *iv) {
-    AES_KEY aes_key;
-    AES_set_decrypt_key((const unsigned char *)HEAVEN_KEY, 256, &aes_key);
-    AES_cbc_encrypt((const unsigned char *)input, (unsigned char *)output, len, &aes_key, iv, AES_DECRYPT);
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    int outlen;
+    
+    EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, 
+                      (const unsigned char *)HEAVEN_KEY, iv);
+    EVP_DecryptUpdate(ctx, (unsigned char *)output, &outlen, 
+                     (const unsigned char *)input, len);
+    EVP_DecryptFinal_ex(ctx, (unsigned char *)output + outlen, &outlen);
+    EVP_CIPHER_CTX_free(ctx);
 }
 
-// Helper function to get real path for heaven area
+static int safe_path_join(char *dest, size_t dest_size, 
+                         const char *dir, const char *file) {
+    size_t dir_len = strlen(dir);
+    size_t file_len = strlen(file);
+    
+    if (dir_len + file_len + 2 > dest_size) { // +2 for '/' and null terminator
+        return -1;
+    }
+    
+    snprintf(dest, dest_size, "%s/%s", dir, file);
+    return 0;
+}
+
+
 static void get_heaven(const char *fuse_path, char *real_path) {
     snprintf(real_path, PATH_MAX, "%s/%s%s", HEAVEN_DIR, fuse_path, HEAVEN_EXT);
 }
 
-// Gzip compression for youth area
+// gzip for youth
 static int gzip_compress(const char *input, size_t len, char *output, size_t *outlen) {
     z_stream zs;
     zs.zalloc = Z_NULL;
@@ -173,15 +195,16 @@ static int mai_getattr(const char *path, struct stat *stbuf) {
         return 0;
     }
     
-    // Check if this is a 7sref path
+    // check if this is a 7sref path
+    char real_path[PATH_MAX];
     char area[PATH_MAX], filename[PATH_MAX];
     if (strncmp(path, "/7sref/", 7) == 0 && parse_7sref_path(path + 7, area, filename) == 0) {
         char new_path[PATH_MAX];
-        snprintf(new_path, PATH_MAX, "/%s/%s", area, filename);
+       if (safe_path_join(new_path, PATH_MAX, area, filename) != 0) return -ENAMETOOLONG;
         return mai_getattr(new_path, stbuf);
     }
     
-    // Determine which area we're in
+    // determine which area we're in
     char real_path[PATH_MAX];
     if (strncmp(path, "/starter/", 9) == 0) {
         get_starter(path + 9, real_path);
@@ -205,7 +228,7 @@ static int mai_getattr(const char *path, struct stat *stbuf) {
     return 0;
 }
 
-// Read directory contents
+
 static int mai_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
                       off_t offset, struct fuse_file_info *fi) {
     (void) offset;
@@ -222,13 +245,12 @@ static int mai_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
         return 0;
     }
     
-    // Handle 7sref directory
+    // handle 7sref directory
     if (strcmp(path, "/7sref") == 0) {
-        // For simplicity, we don't list contents of 7sref
         return 0;
     }
     
-    // Handle other directories
+    // handle other directories
     char real_path[PATH_MAX];
     if (strcmp(path, "/starter") == 0) {
         snprintf(real_path, PATH_MAX, "%s", STARTER_DIR);
@@ -256,7 +278,7 @@ static int mai_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
         st.st_ino = de->d_ino;
         st.st_mode = de->d_type << 12;
         
-        // Remove extensions for FUSE view
+        // remove extensions for fuse view
         char display_name[PATH_MAX];
         strncpy(display_name, de->d_name, PATH_MAX);
         
@@ -299,11 +321,11 @@ static int mai_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     return 0;
 }
 
-// Open a file
+
 static int mai_open(const char *path, struct fuse_file_info *fi) {
     char real_path[PATH_MAX];
     
-    // Handle 7sref paths
+    // handle 7sref paths
     char area[PATH_MAX], filename[PATH_MAX];
     if (strncmp(path, "/7sref/", 7) == 0 && parse_7sref_path(path + 7, area, filename) == 0) {
         char new_path[PATH_MAX];
@@ -311,7 +333,7 @@ static int mai_open(const char *path, struct fuse_file_info *fi) {
         return mai_open(new_path, fi);
     }
     
-    // Determine which area we're in
+    // determine which area we're in
     if (strncmp(path, "/starter/", 9) == 0) {
         get_starter(path + 9, real_path);
     } else if (strncmp(path, "/metro/", 7) == 0) {
@@ -335,14 +357,13 @@ static int mai_open(const char *path, struct fuse_file_info *fi) {
     return 0;
 }
 
-// Read from a file
+
 static int mai_read(const char *path, char *buf, size_t size, off_t offset,
                    struct fuse_file_info *fi) {
     int fd;
     if (fi) {
         fd = fi->fh;
     } else {
-        // Handle 7sref paths
         char area[PATH_MAX], filename[PATH_MAX];
         if (strncmp(path, "/7sref/", 7) == 0 && parse_7sref_path(path + 7, area, filename) == 0) {
             char new_path[PATH_MAX];
@@ -398,7 +419,6 @@ static int mai_read(const char *path, char *buf, size_t size, off_t offset,
         res = pread(fd, buf, size, offset);
         if (res == -1) res = -errno;
     } else if (strncmp(path, "/heaven/", 8) == 0) {
-        // Read IV from first 16 bytes of file
         unsigned char iv[AES_BLOCK_SIZE];
         if (offset == 0) {
             if (pread(fd, iv, AES_BLOCK_SIZE, 0) != AES_BLOCK_SIZE) {
@@ -406,13 +426,10 @@ static int mai_read(const char *path, char *buf, size_t size, off_t offset,
                 return -EIO;
             }
         } else {
-            // For simplicity, we'll assume the IV is stored in the first 16 bytes
-            // In a real implementation, you might want to store it differently
             if (!fi) close(fd);
             return -EIO;
         }
         
-        // Read encrypted data
         char *encrypted = malloc(size);
         res = pread(fd, encrypted, size, offset + AES_BLOCK_SIZE);
         if (res == -1) {
@@ -422,13 +439,12 @@ static int mai_read(const char *path, char *buf, size_t size, off_t offset,
         }
         free(encrypted);
     } else if (strncmp(path, "/skystreet/", 11) == 0) {
-        // Read compressed data
         char *compressed = malloc(size);
         res = pread(fd, compressed, size, offset);
         if (res == -1) {
             res = -errno;
         } else {
-            size_t outsize = size * 4; // Guess at decompressed size
+            size_t outsize = size * 4; 
             char *decompressed = malloc(outsize);
             if (gzip_decompress(compressed, res, decompressed, &outsize) == 0) {
                 memcpy(buf, decompressed, outsize > size ? size : outsize);
@@ -447,14 +463,13 @@ static int mai_read(const char *path, char *buf, size_t size, off_t offset,
     return res;
 }
 
-// Write to a file
+
 static int mai_write(const char *path, const char *buf, size_t size, off_t offset,
                     struct fuse_file_info *fi) {
     int fd;
     if (fi) {
         fd = fi->fh;
     } else {
-        // Handle 7sref paths
         char area[PATH_MAX], filename[PATH_MAX];
         if (strncmp(path, "/7sref/", 7) == 0 && parse_7sref_path(path + 7, area, filename) == 0) {
             char new_path[PATH_MAX];
@@ -541,11 +556,9 @@ static int mai_write(const char *path, const char *buf, size_t size, off_t offse
     return res;
 }
 
-// Create a file
+
 static int mai_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
     char real_path[PATH_MAX];
-    
-    // Handle 7sref paths
     char area[PATH_MAX], filename[PATH_MAX];
     if (strncmp(path, "/7sref/", 7) == 0 && parse_7sref_path(path + 7, area, filename) == 0) {
         char new_path[PATH_MAX];
@@ -553,7 +566,6 @@ static int mai_create(const char *path, mode_t mode, struct fuse_file_info *fi) 
         return mai_create(new_path, mode, fi);
     }
     
-    // Determine which area we're in
     if (strncmp(path, "/starter/", 9) == 0) {
         get_starter(path + 9, real_path);
     } else if (strncmp(path, "/metro/", 7) == 0) {
@@ -577,11 +589,9 @@ static int mai_create(const char *path, mode_t mode, struct fuse_file_info *fi) 
     return 0;
 }
 
-// Unlink (delete) a file
 static int mai_unlink(const char *path) {
     char real_path[PATH_MAX];
     
-    // Handle 7sref paths
     char area[PATH_MAX], filename[PATH_MAX];
     if (strncmp(path, "/7sref/", 7) == 0 && parse_7sref_path(path + 7, area, filename) == 0) {
         char new_path[PATH_MAX];
@@ -589,7 +599,6 @@ static int mai_unlink(const char *path) {
         return mai_unlink(new_path);
     }
     
-    // Determine which area we're in
     if (strncmp(path, "/starter/", 9) == 0) {
         get_starter(path + 9, real_path);
     } else if (strncmp(path, "/metro/", 7) == 0) {
@@ -612,11 +621,10 @@ static int mai_unlink(const char *path) {
     return 0;
 }
 
-// Truncate a file
+
 static int mai_truncate(const char *path, off_t size) {
     char real_path[PATH_MAX];
-    
-    // Handle 7sref paths
+
     char area[PATH_MAX], filename[PATH_MAX];
     if (strncmp(path, "/7sref/", 7) == 0 && parse_7sref_path(path + 7, area, filename) == 0) {
         char new_path[PATH_MAX];
@@ -624,7 +632,7 @@ static int mai_truncate(const char *path, off_t size) {
         return mai_truncate(new_path, size);
     }
     
-    // Determine which area we're in
+
     if (strncmp(path, "/starter/", 9) == 0) {
         get_starter(path + 9, real_path);
     } else if (strncmp(path, "/metro/", 7) == 0) {
