@@ -342,13 +342,6 @@ int main(int argc, char *argv[]) {
     return fuse_main(argc, argv, &baymax_oper, NULL);
 }
 ```
-#### > Penjelasan
-```
-`typedef struct {
-    char nama[50];
-    char alamat[100];
-    char jenis[10];
-    int delivered;
-    char agent[20];
-} Order;
-```
+### Dokumentasi
+![image](https://github.com/user-attachments/assets/135f0991-cc33-4194-b06e-6a1ef0f3a214)
+
