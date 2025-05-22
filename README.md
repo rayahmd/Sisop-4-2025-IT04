@@ -1,5 +1,47 @@
 # Sisop-4-2025-IT04
 
+KELOMPOK IT04
+| No | Nama                              | NRP         |
+|----|-----------------------------------|-------------|
+| 1  | Raya Ahmad Syarif                 | 5027241041  |
+| 2  | Salsa Bil Ulla         | 5027241052 |
+| 3  | Adinda Cahya Pramesti   | 5027241117  |
+
+# Pengantar
+
+Laporan resmi ini dibuat untuk praktikum modul 4. Praktikum Modul 4 ini terdiri dari empat soal dan dikerjakan oleh tiga orang anggota dengan pembagian tertentu.
+
+Berikut ini pembagian pengerjaan dari kelompok IT04:
+
+    Soal 1 dikerjakan oleh Salsa Bil Ulla
+    Soal 2 dikerjakan oleh Adinda Cahya Pramesti
+    Soal 3 dikerjakan oleh Salsa Bil Ulla
+    Soal 4 dikerjakan oleh Raya Ahmad Syarif
+
+Sehingga dengan demikian, Pembagian bobot pengerjaan soal menjadi (Raya 25%, Salsa 50%, Dinda 25%).
+
+Kelompok IT04 juga telah menyelesaikan tugas praktikum modul 4 yang telah diberikan. Dari hasil praktikum yang telah dilakukan sebelumnya, maka diperoleh hasil sebagaimana yang dituliskan pada setiap bab di bawah ini.
+# Ketentuan
+Berikut ini struktur dari repositori praktikum modul 4:
+
+```
+Struktur repository seperti berikut:
+			—soal_1:
+				— hexed.c
+                                  
+			—soal_2:
+— baymax.c
+			
+—soal_3:	
+	— Dockerfile
+	— docker-compose.yml
+	— antink.c
+
+			—soal_4:
+—maimai_fs.c
+
+			—assets
+```
 ## SOAL NOMOR 2
 
 Pada suatu hari, seorang ilmuwan muda menemukan sebuah drive tua yang tertanam di reruntuhan laboratorium robotik. Saat diperiksa, drive tersebut berisi pecahan data dari satu-satunya robot perawat legendaris yang dikenal dengan nama Baymax. Sayangnya, akibat kerusakan sistem selama bertahun-tahun, file utuh Baymax telah terfragmentasi menjadi 14 bagian kecil, masing-masing berukuran 1 kilobyte, dan tersimpan dalam direktori bernama relics. Pecahan tersebut diberi nama berurutan seperti Baymax.jpeg.000, Baymax.jpeg.001, hingga Baymax.jpeg.013. Ilmuwan tersebut kini ingin membangkitkan kembali Baymax ke dalam bentuk digital yang utuh, namun ia tidak ingin merusak file asli yang telah rapuh tersebut.
