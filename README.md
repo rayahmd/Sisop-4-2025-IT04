@@ -42,6 +42,478 @@ Struktur repository seperti berikut:
 
 			—assets
 ```
+## SOAL NOMOR 1
+The Shorekeeper adalah sebuah entitas misterius yang memimpin dan menjaga Black Shores secara keseluruhan. Karena Shorekeeper hanya berada di Black Shores, ia biasanya berjalan - jalan di sekitar Black Shores untuk mencari anomali - anomali yang ada untuk mencegah adanya kekacauan ataupun krisis di Black Shores. Semenjak kemunculan Fallacy of No Return, ia semakin ketat dalam melakukan pencarian anomali - anomali yang ada di Black Shores untuk mencegah hal yang sama terjadi lagi.
+Suatu hari, saat di Tethys' Deep, Shorekeeper menemukan sebuah anomali yang baru diketahui. Anomali ini berupa sebuah teks acak yang kelihatannya tidak memiliki arti. Namun, ia mempunyai ide untuk mencari arti dari teks acak tersebut. [Author: Haidar / **scar / hemorrhager / 恩赫勒夫**]
+a. Pertama, Shorekeeper akan **mengambil** beberapa sampel anomali teks dari link berikut. Pastikan **file zip terhapus** setelah proses **unzip**.
+b. Setelah melihat teks - teks yang didapatkan, ia menyadari bahwa format teks tersebut adalah **hexadecimal**. Dengan informasi tersebut, Shorekeeper mencoba untuk mencoba idenya untuk mencari makna dari teks - teks acak tersebut, yaitu dengan **mengubahnya** dari **string hexadecimal** menjadi sebuah **file image**. Bantulah Shorekeeper dengan membuat kode untuk **FUSE** yang dapat **mengubah string hexadecimal** menjadi sebuah **gambar** ketika file text tersebut **dibuka** di **mount directory**. Lalu, letakkan hasil gambar yang didapat ke dalam **directory** bernama **“image”**.
+c. Untuk penamaan file hasil konversi dari string ke image adalah **[nama file string]_image_[YYYY-mm-dd]_[HH:MM:SS]**.
+Contoh:
+1_image_2025-05-11_18:35:26.png
+d. Catat setiap **konversi** yang ada ke dalam sebuah log file bernama **conversion.log**. Untuk formatnya adalah sebagai berikut.
+[YYYY-mm-dd][HH:MM:SS]: Successfully converted hexadecimal text [nama file string] to [nama file image].
+Contoh:
+```
+[2025-05-11][18:35:26]: Successfully converted hexadecimal text 1.txt to 1_image_2025-05-11_18:35:26.png.
+[2025-05-11][18:35:27]: Successfully converted hexadecimal text 2.txt to 2_image_2025-05-11_18:35:27.png.
+[2025-05-11][18:35:29]: Successfully converted hexadecimal text 3.txt to 3_image_2025-05-11_18:35:29.png.
+[2025-05-11][18:35:32]: Successfully converted hexadecimal text 4.txt to 4_image_2025-05-11_18:35:32.png.
+[2025-05-11][18:35:34]: Successfully converted hexadecimal text 5.txt to 5_image_2025-05-11_18:35:34.png.
+[2025-05-11][18:35:36]: Successfully converted hexadecimal text 6.txt to 6_image_2025-05-11_18:35:36.png.
+[2025-05-11][18:35:38]: Successfully converted hexadecimal text 7.txt to 7_image_2025-05-11_18:35:38.png.
+```
+Contoh struktur akhir adalah sebagai berikut.
+![image](https://github.com/user-attachments/assets/3822beea-1e5b-4651-b49c-a8354fa275f9)
+
+### > Penyelesaian
+> [**hexed.c** sebelum revisi](https://github.com/rayahmd/Sisop-4-2025-IT04/blob/main/soal_1/hexed.c)
+
+> **hexed.c** setelah revisi
+```
+#define FUSE_USE_VERSION 31
+
+#include <fuse.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <dirent.h>
+#include <ctype.h>
+#include <sys/stat.h>
+
+#define BUFFER_SIZE 1024
+#define DEFAULT_MOUNT_POINT "mnt"
+#define ANOMALI_DIR "anomali"
+
+static const char *fileId = "1hi_GDdP51Kn2JJMw02WmCOxuc3qrXzh5";
+static const char *zipFileName = "anomali.zip";
+
+void downloadFileFromDrive(const char *fileId, const char *outputFile) {
+    char command[512];
+    snprintf(command, sizeof(command),
+             "wget --no-check-certificate 'https://docs.google.com/uc?export=download&id=%s' -O %s",
+             fileId, outputFile);
+    system(command);
+}
+
+void cleanHex(char *hexStr) {
+    int j = 0;
+    for (int i = 0; hexStr[i] != '\0'; i++) {
+        if (isxdigit(hexStr[i])) {
+            hexStr[j++] = hexStr[i];
+        }
+    }
+    hexStr[j] = '\0';
+}
+
+int isValidHex(const char *str) {
+    for (int i = 0; str[i] != '\0'; i++) {
+        if (!isxdigit(str[i])) return 0;
+    }
+    return 1;
+}
+
+void unzipAndDelete(const char *zipFile) {
+    char command[512];
+    snprintf(command, sizeof(command), "unzip -o %s -d . && mv anomali/anomali/* %s && rm -r anomali", zipFile, ANOMALI_DIR);
+    system(command);
+    unlink(zipFile);
+}
+
+void hexToImage(const char *inputPath, const char *fileContent, size_t contentLength) {
+    time_t t = time(NULL);
+    struct tm *tm = localtime(&t);
+
+    char *hexStr = malloc(contentLength + 1);
+    strncpy(hexStr, fileContent, contentLength);
+    hexStr[contentLength] = '\0';
+
+    cleanHex(hexStr);
+    if (!isValidHex(hexStr) || strlen(hexStr) % 2 != 0) {
+        free(hexStr);
+        return;
+    }
+
+    char imageDir[256];
+    snprintf(imageDir, sizeof(imageDir), "%s/image", ANOMALI_DIR);
+    mkdir(imageDir, 0777);
+
+    char outputFileName[256];
+    const char *baseName = strrchr(inputPath, '/');
+    baseName = baseName ? baseName + 1 : inputPath;
+    
+    snprintf(outputFileName, sizeof(outputFileName), 
+             "%s/image/%.*s_image_%04d-%02d-%02d_%02d:%02d:%02d.png",
+             ANOMALI_DIR,
+             (int)(strstr(baseName, ".txt") - baseName), baseName,
+             tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
+             tm->tm_hour, tm->tm_min, tm->tm_sec);
+
+    FILE *outFile = fopen(outputFileName, "wb");
+    if (outFile) {
+        for (int i = 0; hexStr[i] && hexStr[i + 1]; i += 2) {
+            char byteStr[3] = {hexStr[i], hexStr[i + 1], '\0'};
+            unsigned char byte = (unsigned char)strtol(byteStr, NULL, 16);
+            fwrite(&byte, 1, 1, outFile);
+        }
+        fclose(outFile);
+    }
+
+    char logPath[256];
+    snprintf(logPath, sizeof(logPath), "%s/conversion.log", ANOMALI_DIR);
+    FILE *logFile = fopen(logPath, "a");
+    if (logFile) {
+        fprintf(logFile, "[%04d-%02d-%02d][%02d:%02d:%02d]: Successfully converted hexadecimal text %s to %s\n",
+                tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
+                tm->tm_hour, tm->tm_min, tm->tm_sec, 
+                baseName, outputFileName);
+        fclose(logFile);
+    }
+
+    free(hexStr);
+}
+
+static int hexed_getattr(const char *path, struct stat *stbuf) {
+    memset(stbuf, 0, sizeof(struct stat));
+    
+    if (strcmp(path, "/") == 0) {
+        stbuf->st_mode = S_IFDIR | 0755;
+        stbuf->st_nlink = 2;
+        return 0;
+    }
+    
+    if (strcmp(path, "/image") == 0) {
+        stbuf->st_mode = S_IFDIR | 0755;
+        stbuf->st_nlink = 2;
+        return 0;
+    }
+    
+    if (strstr(path, ".txt")) {
+        char realPath[256];
+        snprintf(realPath, sizeof(realPath), "%s%s", ANOMALI_DIR, path);
+        if (stat(realPath, stbuf) == 0) {
+            stbuf->st_mode = S_IFREG | 0644;
+            return 0;
+        }
+    }
+    
+    if (strcmp(path, "/conversion.log") == 0) {
+        char logPath[256];
+        snprintf(logPath, sizeof(logPath), "%s/conversion.log", ANOMALI_DIR);
+        if (stat(logPath, stbuf) == 0) {
+            stbuf->st_mode = S_IFREG | 0644;
+        } else {
+            stbuf->st_mode = S_IFREG | 0644;
+            stbuf->st_size = 0;
+        }
+        return 0;
+    }
+    
+    if (strstr(path, "/image/") && strstr(path, ".png")) {
+        char imagePath[256];
+        snprintf(imagePath, sizeof(imagePath), "%s%s", ANOMALI_DIR, path);
+        if (stat(imagePath, stbuf) == 0) {
+            stbuf->st_mode = S_IFREG | 0644;
+        } else {
+            stbuf->st_mode = S_IFREG | 0644;
+            stbuf->st_size = 0;
+        }
+        return 0;
+    }
+    
+    return -ENOENT;
+}
+
+static int hexed_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
+                        off_t offset, struct fuse_file_info *fi) {
+    filler(buf, ".", NULL, 0);
+    filler(buf, "..", NULL, 0);
+
+    if (strcmp(path, "/") == 0) {
+        DIR *dp = opendir(ANOMALI_DIR);
+        if (dp) {
+            struct dirent *de;
+            while ((de = readdir(dp)) != NULL) {
+                if (strstr(de->d_name, ".txt")) {
+                    filler(buf, de->d_name, NULL, 0);
+                }
+            }
+            closedir(dp);
+        }
+        filler(buf, "image", NULL, 0);
+        filler(buf, "conversion.log", NULL, 0);
+    } 
+    else if (strcmp(path, "/image") == 0) {
+        char imageDir[256];
+        snprintf(imageDir, sizeof(imageDir), "%s/image", ANOMALI_DIR);
+        DIR *dp = opendir(imageDir);
+        if (dp) {
+            struct dirent *de;
+            while ((de = readdir(dp)) != NULL) {
+                if (strstr(de->d_name, ".png")) {
+                    filler(buf, de->d_name, NULL, 0);
+                }
+            }
+            closedir(dp);
+        }
+    }
+    
+    return 0;
+}
+
+static int hexed_open(const char *path, struct fuse_file_info *fi) {
+    return 0;
+}
+
+static int hexed_read(const char *path, char *buf, size_t size, off_t offset,
+                     struct fuse_file_info *fi) {
+    char realPath[256];
+    snprintf(realPath, sizeof(realPath), "%s%s", ANOMALI_DIR, path);
+
+    FILE *file = fopen(realPath, "r");
+    if (!file) return -ENOENT;
+
+    fseek(file, 0, SEEK_END);
+    long fileSize = ftell(file);
+    rewind(file);
+
+    if (offset >= fileSize) {
+        fclose(file);
+        return 0;
+    }
+
+    if (offset + size > fileSize) {
+        size = fileSize - offset;
+    }
+
+    fseek(file, offset, SEEK_SET);
+    size_t bytesRead = fread(buf, 1, size, file);
+
+    if (strstr(path, ".txt") && offset == 0) {
+        char *content = malloc(fileSize + 1);
+        fseek(file, 0, SEEK_SET);
+        fread(content, 1, fileSize, file);
+        content[fileSize] = '\0';
+
+        time_t t = time(NULL);
+        struct tm *tm = localtime(&t);
+        const char *baseName = strrchr(path, '/');
+        baseName = baseName ? baseName + 1 : path;
+
+        char outputFileName[256];
+        snprintf(outputFileName, sizeof(outputFileName),
+                 "%s/image/%.*s_image_%04d-%02d-%02d_%02d:%02d:%02d.png",
+                 ANOMALI_DIR,
+                 (int)(strstr(baseName, ".txt") - baseName), baseName,
+                 tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
+                 tm->tm_hour, tm->tm_min, tm->tm_sec);
+
+        if (access(outputFileName, F_OK) != 0) {
+            hexToImage(realPath, content, fileSize);
+        }
+
+        free(content);
+    }
+
+    fclose(file);
+    return bytesRead;
+}
+
+static struct fuse_operations hexed_oper = {
+    .getattr = hexed_getattr,
+    .readdir = hexed_readdir,
+    .open = hexed_open,
+    .read = hexed_read,
+};
+
+int main(int argc, char *argv[]) {
+    mkdir(ANOMALI_DIR, 0755);
+    mkdir(DEFAULT_MOUNT_POINT, 0755);
+
+    downloadFileFromDrive(fileId, zipFileName);
+    unzipAndDelete(zipFileName);
+
+    char imageDir[256];
+    snprintf(imageDir, sizeof(imageDir), "%s/image", ANOMALI_DIR);
+    mkdir(imageDir, 0777);
+
+    char logPath[256];
+    snprintf(logPath, sizeof(logPath), "%s/conversion.log", ANOMALI_DIR);
+    FILE *logFile = fopen(logPath, "w");
+    if (logFile) fclose(logFile);
+
+    char *fuse_argv[] = {
+        argv[0],
+        "-f",
+        DEFAULT_MOUNT_POINT
+    };
+    return fuse_main(3, fuse_argv, &hexed_oper, NULL);
+}
+```
+
+### > Penjelasan
+**i. Download file zip dari link Google Drive**
+> Shorekeeper akan **mengambil** beberapa sampel anomali teks dari link berikut.
+```
+static const char *fileId = "1hi_GDdP51Kn2JJMw02WmCOxuc3qrXzh5";
+...
+void downloadFileFromDrive(const char *fileId, const char *outputFile) {
+    char command[512];
+    snprintf(command, sizeof(command),
+             "wget --no-check-certificate 'https://docs.google.com/uc?export=download&id=%s' -O %s",
+             fileId, outputFile);
+    system(command);
+}
+```
+Mengunduh `anomali.zip` dari Google Drive menggunakan `wget`.
+
+**ii. Hapus file zip setelah proses unzip**
+> Pastikan **file zip terhapus** setelah proses **unzip**.
+```
+void unzipAndDelete(const char *zipFile) {
+    char command[512];
+    snprintf(command, sizeof(command), "unzip -o %s -d . && mv anomali/anomali/* %s && rm -r anomali", zipFile, ANOMALI_DIR);
+    system(command);
+    unlink(zipFile);
+}
+```
+File `anomali.zip` dihapus setelah isinya dipindahkan.
+
+**iii. Konversi isi .txt (hexadecimal) menjadi gambar saat dibuka**
+> ...mengubahnya dari string hexadecimal menjadi sebuah file image ketika file text tersebut dibuka di mount directory.
+```
+static int hexed_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
+    ...
+    if (strstr(path, ".txt") && offset == 0) {
+        ...
+        if (access(outputFileName, F_OK) != 0) {
+            hexToImage(realPath, content, fileSize);
+        }
+        free(content);
+    }
+    fclose(file);
+    return bytesRead;
+}
+```
+Dalam `hexed_read()`, file `.txt` yang dibuat langsung dikonversi.
+
+```
+void hexToImage(const char *inputPath, const char *fileContent, size_t contentLength) {
+    ...
+    char *hexStr = malloc(contentLength + 1);
+    strncpy(hexStr, fileContent, contentLength);
+    hexStr[contentLength] = '\0';
+
+    cleanHex(hexStr);
+    if (!isValidHex(hexStr) || strlen(hexStr) % 2 != 0) {
+        free(hexStr);
+        return;
+    }
+    ...
+    FILE *outFile = fopen(outputFileName, "wb");
+    if (outFile) {
+        for (int i = 0; hexStr[i] && hexStr[i + 1]; i += 2) {
+            char byteStr[3] = {hexStr[i], hexStr[i + 1], '\0'};
+            unsigned char byte = (unsigned char)strtol(byteStr, NULL, 16);
+            fwrite(&byte, 1, 1, outFile);
+        }
+        fclose(outFile);
+    }
+    ...
+    free(hexStr);
+}
+```
+`hexStr` adalah string hasil bersih dari teks hexadecimal. Pada `for` akan membaca 2 karakter hex sekaligus dan membentuk jadi string dua digit (`byteStr[3]`) lalu diubah ke bentuk byte asli (`strtol(..., 16)`). Terakhir ditulis ke file `.png` menggunakan `fwrite()`.
+
+**iv. Meletakkan hasil gambar ke dalam direktori image**
+> ...letakkan hasil gambar yang didapat ke dalam directory bernama 'image'.
+```
+void hexToImage(const char *inputPath, const char *fileContent, size_t contentLength) {
+    ...
+    char imageDir[256];
+    snprintf(imageDir, sizeof(imageDir), "%s/image", ANOMALI_DIR);
+    mkdir(imageDir, 0777);
+    ...
+}
+```
+Dengan ini, gambar akan disimpan pada direktori baru yaitu `image`.
+
+**v. Format penamaan gambar**
+> Untuk penamaan file hasil konversi dari string ke image adalah **[nama file string]_image_[YYYY-mm-dd]_[HH:MM:SS]**.
+```
+void hexToImage(const char *inputPath, const char *fileContent, size_t contentLength) {
+    time_t t = time(NULL);
+    struct tm *tm = localtime(&t);
+    ...
+    char outputFileName[256];
+    const char *baseName = strrchr(inputPath, '/');
+    baseName = baseName ? baseName + 1 : inputPath;
+    
+    snprintf(outputFileName, sizeof(outputFileName), 
+             "%s/image/%.*s_image_%04d-%02d-%02d_%02d:%02d:%02d.png",
+             ANOMALI_DIR,
+             (int)(strstr(baseName, ".txt") - baseName), baseName,
+             tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
+             tm->tm_hour, tm->tm_min, tm->tm_sec);
+    ...
+}
+```
+Penamaan gambar sesuai dengan format soal.
+
+**vi. Catat setiap konversi ke file conversion.log sesuai format**
+> Catat setiap **konversi** yang ada ke dalam sebuah log file bernama **conversion.log**. Untuk formatnya adalah sebagai berikut. [YYYY-mm-dd][HH:MM:SS]: Successfully converted hexadecimal text [nama file string] to [nama file image].
+```
+void hexToImage(const char *inputPath, const char *fileContent, size_t contentLength) {
+    ...
+    char logPath[256];
+    snprintf(logPath, sizeof(logPath), "%s/conversion.log", ANOMALI_DIR);
+    FILE *logFile = fopen(logPath, "a");
+    if (logFile) {
+        fprintf(logFile, "[%04d-%02d-%02d][%02d:%02d:%02d]: Successfully converted hexadecimal text %s to %s\n",
+                tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
+                tm->tm_hour, tm->tm_min, tm->tm_sec, 
+                baseName, outputFileName);
+        fclose(logFile);
+    }
+    ...
+```
+File log `conversion.log` mencatat setiap proses konversi dari `.txt` ke `.png` dengan format log yang sudah ditetapkan.
+
+### > Dokumentasi
+> Sebelum revisi
+![image](https://github.com/user-attachments/assets/fdc319b4-fccc-45e3-a373-2fdac86d3e22)
+![image](https://github.com/user-attachments/assets/351a07a2-5dbb-46f8-9ba5-ce5cd0cf1155)
+
+> Setelah revisi
+![image](https://github.com/user-attachments/assets/f6c4c2a5-dd3a-4043-94e6-316a87dfe812)
+![image](https://github.com/user-attachments/assets/2f9219f4-23d9-4829-a8fa-825fe5606219)
+![image](https://github.com/user-attachments/assets/b567c6d7-5eaf-4cad-81fe-2046a3188af3)
+![image](https://github.com/user-attachments/assets/721bd5d1-2265-43c4-988b-ccd98a5ea76a)
+![image](https://github.com/user-attachments/assets/27add52a-b242-49b5-9972-87253c15abe5)
+![image](https://github.com/user-attachments/assets/dd85e2c4-7bb2-4b89-9ecd-4358a4fe6250)
+![image](https://github.com/user-attachments/assets/9faf57c7-1a06-4cfe-8e5b-04805e1c8a02)
+![image](https://github.com/user-attachments/assets/cba0d21d-1234-495a-90e9-2b2a567f8555)
+![image](https://github.com/user-attachments/assets/3085eeca-110f-4553-be86-473bc733bc69)
+![image](https://github.com/user-attachments/assets/4a1c07ca-b2dd-4eb3-97be-9f3f1281d8da)
+![image](https://github.com/user-attachments/assets/b6d61459-22d2-46aa-aa1a-d3c7eeb25d46)
+
+#### Perbandingan kode sebelum dan sesudah revisi
+| Aspek                              | `hexed.c` sebelum revisi                                                               | `hexed.c` setelah revisi                                                                     |
+| ---------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| **Deklarasi Global**               | `hexStr` global, `outputFileName`, dan `logFile` juga global                           | Semua variabel lokal di `hexToImage`, lebih bersih                                           |
+| **Struktur Folder**                | Pakai folder `mnt` untuk hasil mount dan `anomali/` sebagai tempat file .txt dan image | Semua file tetap di dalam `anomali/`, termasuk image dan log                                 |
+| **Cara unzip**                     | Unzip ke folder `temp`, lalu dipindah ke `anomali/`, lalu `temp` dihapus               | Unzip langsung ke root, lalu isi `anomali/anomali` dipindah ke `anomali` lalu folder dihapus |
+| **Pemanggilan `hexToImage`**       | Hanya pada saat `read()` file `.txt`, langsung konversi ke image                       | Konversi hanya dilakukan kalau file `.png` belum ada (`access(...) != 0`)                    |
+| **Logging**                        | File log dibuka dan ditulis di `hexToImage` dengan global pointer `logFile`            | File log dibuka dan ditutup langsung di dalam `hexToImage`                                   |
+| **Main `fuse_main`**               | `argc = 2`, mount langsung ke `"mnt"` tanpa opsi                                       | `argc = 3`, mount ke `"mnt"` dengan opsi `-f` (foreground)                                   |
+| **Ukuran file dummy di `getattr`** | Semua file `.txt`, `.png`, dan log diberi ukuran `1024` secara manual                  | `stat()` dipanggil untuk membaca ukuran asli file (lebih realistis)                          |
+| **Handling direktori `image/`**    | Hanya dibuat jika belum ada                                                            | Selalu dibuat di `main()` dan `hexToImage` juga coba buat ulang                              |
+| **Error handling download**        | `system(command)` diperiksa hasilnya, exit jika gagal                                  | Tidak dicek (lebih rawan error silent)                                                       |
+| **Fungsi `hexToImage`**            | Membaca file dari disk langsung                                                        | Menerima `fileContent` sebagai parameter dari `read()` (lebih fleksibel dan efisien)         |
+
 ## SOAL NOMOR 2
 
 Pada suatu hari, seorang ilmuwan muda menemukan sebuah drive tua yang tertanam di reruntuhan laboratorium robotik. Saat diperiksa, drive tersebut berisi pecahan data dari satu-satunya robot perawat legendaris yang dikenal dengan nama Baymax. Sayangnya, akibat kerusakan sistem selama bertahun-tahun, file utuh Baymax telah terfragmentasi menjadi 14 bagian kecil, masing-masing berukuran 1 kilobyte, dan tersimpan dalam direktori bernama relics. Pecahan tersebut diberi nama berurutan seperti Baymax.jpeg.000, Baymax.jpeg.001, hingga Baymax.jpeg.013. Ilmuwan tersebut kini ingin membangkitkan kembali Baymax ke dalam bentuk digital yang utuh, namun ia tidak ingin merusak file asli yang telah rapuh tersebut.
@@ -386,6 +858,9 @@ int main(int argc, char *argv[]) {
 ```
 ### Dokumentasi
 ![image](https://github.com/user-attachments/assets/135f0991-cc33-4194-b06e-6a1ef0f3a214)
+
+## SOAL NOMOR 3
+**Tidak solve**. Dikarenakan sudah saya coba berkali-kali namun tetap tidak berjalan sesuai soal dan docker yang tidak berfungsi dengan baik. Ditambah dengan keterbatasan waktu saya saat mengerjakan, maka saya tidak dapat menyelesaikan soalnya dengan baik.
 
 ## SOAL NOMOR 4
 ```
