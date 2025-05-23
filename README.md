@@ -628,3 +628,6 @@ static int mai_getattr(const char *path, struct stat *stbuf) {
 Function ini untuk mengambil atribut file atau direktori. Fungsi ini pertama memeriksa apakah path adalah root (/) atau salah satu direktori virtual khusus seperti /starter, /metro, dll., dan mengatur mode direktori jika cocok. Jika path merupakan subdirektori seperti /starter/filename, ia memetakan ke path asli di filesystem menggunakan fungsi seperti get_starter(), lalu memanggil lstat untuk mendapatkan atribut file sebenarnya. Untuk direktori /heaven, ia mengurangi ukuran file sebesar AES_BLOCK_SIZE karena data enkripsi memiliki header tambahan. Untuk /skystreet, fungsi membaca dan mendekompresi file gzip untuk menentukan ukuran aslinya. 
 
 ### DOKUMENTASI
+![Image](https://github.com/user-attachments/assets/5952f436-f428-45e3-8120-043711420810)  
+
+[KENDALA] Mohon maaf sampai deadline berakhir, sudah diusahakan untuk perbaikan tetapi yang didapat hanya output permission denied🙏
